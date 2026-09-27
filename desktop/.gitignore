@@ -1,0 +1,6 @@
+# Desktop build artifacts
+build/bin/
+*.exe
+
+# Frontend node_modules
+frontend/node_modules/

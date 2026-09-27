@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MetaTube 影片搜索与刮削控制台 (SDK UI 原型)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f5f3ff',
+              100: '#ede9fe',
+              500: '#8b5cf6',
+              600: '#7c3aed',
+              700: '#6d28d9',
+            },
+            surface: {
+              900: '#0f172a',
+              850: '#131d35',
+              800: '#1e293b',
+              700: '#334155',
+              600: '#475569',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* 自定义美化滚动条与玻璃质感 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .glass-panel {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .poster-glow {
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(124, 58, 237, 0.2);
+    }
+  </style>
+</head>
+<body class="bg-[#0b0f19] text-slate-100 min-h-screen antialiased flex flex-col font-sans">
+  <div id="app" class="flex flex-col min-h-screen" v-cloak>
+
+    <!-- 顶部导航栏 -->
+    <header class="sticky top-0 z-40 bg-surface-900/90 backdrop-blur border-b border-slate-800">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        <!-- Logo 与标题 -->
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-violet-600/30">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">MetaTube Scraper</h1>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300 border border-violet-700/50">SDK Prototype</span>
+            </div>
+            <p class="text-xs text-slate-400">基于 Go SDK API 打造的元数据刮削与检视工作台</p>
+          </div>
+        </div>
+
+        <!-- 服务器状态与快速连接设置 -->
+        <div class="flex items-center gap-3">
+          <!-- 运行模式切换 (Mock 模式 / Live 模式) -->
+          <div class="flex items-center bg-surface-800/80 p-1 rounded-lg border border-slate-700 text-xs">
+            <button 
+              @click="mockMode = true" 
+              :class="mockMode ? 'bg-violet-600 text-white shadow font-medium' : 'text-slate-400 hover:text-slate-200'"
+              class="px-2.5 py-1 rounded transition flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              演示模式 (Mock)
+            </button>
+            <button 
+              @click="mockMode = false; testConnection()" 
+              :class="!mockMode ? 'bg-violet-600 text-white shadow font-medium' : 'text-slate-400 hover:text-slate-200'"
+              class="px-2.5 py-1 rounded transition flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full" :class="connected ? 'bg-emerald-400' : 'bg-amber-400'"></span>
+              直连 SDK 服务
+            </button>
+          </div>
+
+          <!-- 设置弹窗按钮 -->
+          <button @click="showConfigModal = true" class="p-2 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-300 hover:text-white border border-slate-700 transition" title="配置 SDK 端点与 Token">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主工作区 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+      <!-- 状态概览横幅 (当直连模式时提示) -->
+      <div v-if="!mockMode" class="p-3 rounded-xl bg-surface-800/60 border border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
+        <div class="flex items-center gap-3">
+          <span class="flex h-2.5 w-2.5 relative">
+            <span v-if="connected" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2.5 w-2.5" :class="connected ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+          </span>
+          <span>目标服务：<code class="text-violet-300">{{ serverUrl }}</code></span>
+          <span class="text-slate-500">|</span>
+          <span>系统状态：<strong :class="connected ? 'text-emerald-400' : 'text-rose-400'">{{ connected ? '已就绪 (v1 API 在线)' : '未能连接 (请启动 server 或切换到 Mock 演示)' }}</strong></span>
+          <span v-if="connected" class="text-slate-400">已载入 <strong>{{ movieProviders.length }}</strong> 个影片数据源</span>
+        </div>
+        <button @click="testConnection" class="text-violet-400 hover:text-violet-300 flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          刷新源状态
+        </button>
+      </div>
+
+      <!-- 核心搜索与刮削控制台栏 -->
+      <section class="glass-panel p-5 rounded-2xl shadow-xl">
+        <div class="flex flex-col gap-4">
+          <!-- 搜索主输入行 -->
+          <div class="flex flex-col md:flex-row items-stretch gap-3">
+            <!-- 搜索类型 / Provider 选择下拉 -->
+            <div class="w-full md:w-56 shrink-0">
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span>数据源 (Provider)</span>
+                <span class="text-[10px] text-slate-500 lowercase font-normal">/v1/providers</span>
+              </label>
+              <div class="relative">
+                <select v-model="selectedProvider" class="w-full bg-surface-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-violet-500 transition appearance-none">
+                  <option value="">⚡ 全部数据源并发搜索 (All)</option>
+                  <optgroup label="主流片商 / 综合源">
+                    <option v-for="p in movieProviders" :key="p.name" :value="p.name">
+                      {{ p.name }} ({{ p.label || p.name }})
+                    </option>
+                  </optgroup>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- 关键词 / 番号 / URL 输入 -->
+            <div class="flex-1">
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span>搜索关键词、番号或详情页 URL</span>
+                <span class="text-[10px] text-slate-500 lowercase font-normal">GET /v1/movies/search?q=...</span>
+              </label>
+              <div class="relative flex items-center">
+                <input 
+                  type="text" 
+                  v-model="searchQuery" 
+                  @keyup.enter="handleSearch"
+                  placeholder="例如：SSIS-001、FC2-PPV-123456、关键字，或直接粘贴原厂详情页 URL" 
+                  class="w-full bg-surface-900 border border-slate-700 rounded-xl pl-10 pr-24 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 transition">
+                <span class="absolute left-3 text-slate-400">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </span>
+                <!-- 快捷清空 -->
+                <button v-if="searchQuery" @click="searchQuery = ''" class="absolute right-20 text-slate-500 hover:text-slate-300">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+                <!-- 搜索主按钮 -->
+                <button 
+                  @click="handleSearch" 
+                  :disabled="loadingSearch"
+                  class="absolute right-1.5 px-4 py-1.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition shadow-md shadow-violet-600/30 flex items-center gap-1.5">
+                  <svg v-if="loadingSearch" class="animate-spin -ml-0.5 w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                  </svg>
+                  <span>{{ loadingSearch ? '搜索中...' : '开始检索' }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 刮削高级选项行 -->
+          <div class="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div class="flex items-center flex-wrap gap-4 text-slate-400">
+              <!-- Fallback 容错开关 (对应 API ?fallback=true/false) -->
+              <label class="flex items-center gap-2 cursor-pointer hover:text-slate-300">
+                <input type="checkbox" v-model="searchOptions.fallback" class="w-3.5 h-3.5 rounded bg-surface-900 border-slate-700 text-violet-600 focus:ring-0">
+                <span>启用备选策略 (Fallback)</span>
+                <span class="text-[10px] text-slate-500">主源无果时智能降级</span>
+              </label>
+
+              <!-- Lazy 缓存开关 (对应 API ?lazy=true/false) -->
+              <label class="flex items-center gap-2 cursor-pointer hover:text-slate-300">
+                <input type="checkbox" v-model="searchOptions.lazy" class="w-3.5 h-3.5 rounded bg-surface-900 border-slate-700 text-violet-600 focus:ring-0">
+                <span>优先数据库缓存 (Lazy Cache)</span>
+                <span class="text-[10px] text-slate-500">关闭则强制在线重新刮削</span>
+              </label>
+
+              <!-- 自动翻译开关 (调用 /v1/translate) -->
+              <label class="flex items-center gap-2 cursor-pointer hover:text-slate-300">
+                <input type="checkbox" v-model="searchOptions.autoTranslate" class="w-3.5 h-3.5 rounded bg-surface-900 border-slate-700 text-violet-600 focus:ring-0">
+                <span>自动翻译标题与简介 (Translate)</span>
+              </label>
+            </div>
+
+            <!-- 快捷样例番号推荐 -->
+            <div class="flex items-center gap-1.5 text-slate-500">
+              <span>快捷尝试:</span>
+              <button v-for="tag in sampleQueries" :key="tag" @click="quickSearch(tag)" class="px-2 py-0.5 rounded bg-surface-800 hover:bg-surface-700 text-slate-300 text-[11px] transition border border-slate-700/60">
+                {{ tag }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 搜索结果区 -->
+      <section class="space-y-4">
+        <!-- 结果操作栏 -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <h2 class="text-base font-bold text-slate-200">搜索刮削候选结果</h2>
+            <span v-if="searchResults.length > 0" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+              共找到 {{ searchResults.length }} 部匹配影片
+            </span>
+          </div>
+
+          <!-- 视图模式切换 -->
+          <div class="flex items-center bg-surface-800 p-0.5 rounded-lg border border-slate-700 text-xs text-slate-400">
+            <button @click="viewMode = 'grid'" :class="viewMode === 'grid' ? 'bg-surface-700 text-white' : 'hover:text-slate-200'" class="p-1.5 rounded transition" title="海报网格视图">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+            </button>
+            <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-surface-700 text-white' : 'hover:text-slate-200'" class="p-1.5 rounded transition" title="列表视图">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 初始空状态 / 提示 -->
+        <div v-if="searchResults.length === 0 && !loadingSearch" class="glass-panel rounded-2xl p-12 text-center space-y-4">
+          <div class="w-16 h-16 rounded-2xl bg-surface-800 text-slate-500 mx-auto flex items-center justify-center border border-slate-700">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <div class="max-w-md mx-auto space-y-1">
+            <h3 class="text-sm font-semibold text-slate-300">暂无搜索结果</h3>
+            <p class="text-xs text-slate-500">输入番号（如 SSIS-001）、片商源或原站链接，点击“开始检索”即可发起多源并发刮削。</p>
+          </div>
+          <div class="pt-2">
+            <button @click="quickSearch('SSIS-001')" class="text-xs text-violet-400 hover:text-violet-300 font-medium">点击自动装载演示样例数据 &rarr;</button>
+          </div>
+        </div>
+
+        <!-- 加载中 Skeleton -->
+        <div v-if="loadingSearch" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          <div v-for="i in 5" :key="i" class="glass-panel rounded-xl p-3 animate-pulse space-y-3">
+            <div class="aspect-[2/3] bg-surface-800 rounded-lg w-full"></div>
+            <div class="h-4 bg-surface-800 rounded w-1/3"></div>
+            <div class="h-3 bg-surface-800 rounded w-4/5"></div>
+            <div class="h-3 bg-surface-800 rounded w-1/2"></div>
+          </div>
+        </div>
+
+        <!-- 视图 1：网格海报卡片 (Grid View) -->
+        <div v-if="searchResults.length > 0 && !loadingSearch && viewMode === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div 
+            v-for="item in searchResults" 
+            :key="item.provider + item.id" 
+            class="group bg-surface-850 hover:bg-surface-800 border border-slate-800 hover:border-violet-500/50 rounded-xl overflow-hidden transition-all duration-300 flex flex-col hover:shadow-xl hover:shadow-violet-900/10">
+            
+            <!-- 海报封面容器 -->
+            <div class="relative aspect-[2/3] bg-surface-900 overflow-hidden cursor-pointer" @click="fetchMovieDetail(item.provider, item.id)">
+              <img 
+                :src="getImageProxy(item.provider, item.id, item.thumb_url || item.cover_url)" 
+                :alt="item.title"
+                loading="lazy"
+                class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                @error="handleImageError">
+              
+              <!-- 悬浮阴影遮罩 -->
+              <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-80 group-hover:opacity-90 transition"></div>
+
+              <!-- 顶部角标：Provider 数据源 -->
+              <div class="absolute top-2 left-2 flex items-center gap-1">
+                <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-black/60 backdrop-blur text-violet-300 border border-violet-500/30">
+                  {{ item.provider }}
+                </span>
+                <span v-if="item.score" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/90 text-black flex items-center gap-0.5">
+                  ★ {{ item.score.toFixed(1) }}
+                </span>
+              </div>
+
+              <!-- 底部悬浮快捷按钮 -->
+              <div class="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-1 opacity-90 group-hover:opacity-100 transition">
+                <span class="text-xs font-mono font-bold text-white bg-violet-600/90 px-2 py-0.5 rounded shadow">
+                  {{ item.number }}
+                </span>
+                <span class="text-[11px] text-slate-300 font-mono">
+                  {{ item.release_date || '未知日期' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- 卡片信息区 -->
+            <div class="p-3 flex-1 flex flex-col justify-between space-y-2">
+              <div>
+                <h4 
+                  @click="fetchMovieDetail(item.provider, item.id)"
+                  class="text-xs font-medium text-slate-200 line-clamp-2 hover:text-violet-400 cursor-pointer transition leading-snug" 
+                  :title="item.title">
+                  {{ item.title }}
+                </h4>
+                
+                <!-- 演员列表 -->
+                <div v-if="item.actors && item.actors.length" class="mt-1.5 flex flex-wrap gap-1">
+                  <span v-for="actor in item.actors.slice(0, 3)" :key="actor" class="text-[10px] px-1.5 py-0.5 rounded bg-surface-700/60 text-slate-300 hover:text-white">
+                    {{ actor }}
+                  </span>
+                  <span v-if="item.actors.length > 3" class="text-[10px] text-slate-500">
+                    +{{ item.actors.length - 3 }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- 卡片底部动作栏 -->
+              <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                <a :href="item.homepage" target="_blank" rel="noopener" class="text-slate-400 hover:text-slate-200 flex items-center gap-1 text-[11px]">
+                  <span>原厂页</span>
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                </a>
+
+                <button 
+                  @click="fetchMovieDetail(item.provider, item.id)" 
+                  class="px-2.5 py-1 rounded bg-violet-600/20 hover:bg-violet-600 text-violet-300 hover:text-white text-[11px] font-medium transition flex items-center gap-1">
+                  <span>查看元数据</span>
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 视图 2：表格列表模式 (Table View) -->
+        <div v-if="searchResults.length > 0 && !loadingSearch && viewMode === 'table'" class="glass-panel rounded-xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="bg-surface-800/80 text-slate-400 uppercase font-semibold border-b border-slate-700/60">
+                <tr>
+                  <th class="px-4 py-3 w-16">预览</th>
+                  <th class="px-4 py-3 w-32">番号</th>
+                  <th class="px-4 py-3">标题</th>
+                  <th class="px-4 py-3 w-28">数据源</th>
+                  <th class="px-4 py-3 w-40">演员</th>
+                  <th class="px-4 py-3 w-28">发行日期</th>
+                  <th class="px-4 py-3 w-20">评分</th>
+                  <th class="px-4 py-3 w-28 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800">
+                <tr v-for="item in searchResults" :key="item.provider + item.id" class="hover:bg-surface-800/50 transition">
+                  <td class="px-4 py-2">
+                    <img 
+                      :src="getImageProxy(item.provider, item.id, item.thumb_url || item.cover_url)" 
+                      class="w-10 h-14 object-cover rounded bg-surface-900" 
+                      @error="handleImageError">
+                  </td>
+                  <td class="px-4 py-3 font-mono font-bold text-violet-300">{{ item.number }}</td>
+                  <td class="px-4 py-3 font-medium text-slate-200">
+                    <span class="hover:text-violet-400 cursor-pointer" @click="fetchMovieDetail(item.provider, item.id)">{{ item.title }}</span>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="px-2 py-0.5 rounded bg-surface-700 text-slate-300 uppercase text-[10px] font-semibold">{{ item.provider }}</span>
+                  </td>
+                  <td class="px-4 py-3 text-slate-400">{{ (item.actors || []).join('、') || '-' }}</td>
+                  <td class="px-4 py-3 font-mono text-slate-400">{{ item.release_date || '-' }}</td>
+                  <td class="px-4 py-3 text-amber-400 font-semibold">{{ item.score ? item.score.toFixed(1) : '-' }}</td>
+                  <td class="px-4 py-3 text-right space-x-2">
+                    <button @click="fetchMovieDetail(item.provider, item.id)" class="text-violet-400 hover:text-violet-300 font-medium">详情</button>
+                    <a :href="item.homepage" target="_blank" class="text-slate-500 hover:text-slate-300">原厂</a>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 刮削影片详情抽屉 / 模态卡片 (Detail Modal) -->
+      <div v-if="activeDetailModal" class="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
+        <div class="relative w-full max-w-5xl bg-surface-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+          
+          <!-- 模态框顶部背景 Banner (Backdrop Image) -->
+          <div class="relative h-44 sm:h-56 bg-surface-850 overflow-hidden shrink-0">
+            <img 
+              :src="currentMovie.big_cover_url || currentMovie.cover_url || currentMovie.thumb_url" 
+              class="w-full h-full object-cover object-top opacity-30 filter blur-sm scale-105"
+              @error="handleImageError">
+            <div class="absolute inset-0 bg-gradient-to-t from-surface-900 via-surface-900/60 to-transparent"></div>
+            
+            <!-- 顶部操作按钮 -->
+            <div class="absolute top-4 right-4 flex items-center gap-2">
+              <button 
+                @click="copyNFO" 
+                class="px-3 py-1.5 bg-surface-800/80 hover:bg-surface-700 backdrop-blur border border-slate-700 text-xs text-slate-200 rounded-lg flex items-center gap-1.5 transition">
+                <svg class="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg>
+                <span>生成 NFO</span>
+              </button>
+              <button 
+                @click="activeDetailModal = false" 
+                class="w-8 h-8 rounded-full bg-surface-800/80 hover:bg-surface-700 backdrop-blur border border-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <!-- Banner 内信息概览 -->
+            <div class="absolute bottom-4 left-6 right-6 flex items-end justify-between gap-4">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded bg-violet-600 font-mono font-bold text-xs text-white shadow">{{ currentMovie.number }}</span>
+                  <span class="px-2 py-0.5 rounded bg-surface-800 text-[10px] text-slate-300 font-semibold uppercase border border-slate-700">{{ currentMovie.provider }}</span>
+                  <span v-if="currentMovie.score" class="text-amber-400 text-xs font-bold flex items-center gap-1">
+                    ★ {{ currentMovie.score.toFixed(1) }} 分
+                  </span>
+                </div>
+                <h3 class="text-lg sm:text-xl font-bold text-white tracking-tight line-clamp-1">{{ currentMovie.title }}</h3>
+              </div>
+            </div>
+          </div>
+
+          <!-- 内容主体可滚动区 -->
+          <div class="flex-1 overflow-y-auto p-6 space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+              
+              <!-- 左侧：封面图与图片处理工坊 (演示 SDK /v1/images 图像处理接口) -->
+              <div class="md:col-span-4 space-y-4">
+                <div class="bg-surface-850 p-3 rounded-xl border border-slate-800 space-y-3">
+                  <div class="relative aspect-[2/3] bg-surface-900 rounded-lg overflow-hidden border border-slate-700/60 poster-glow">
+                    <img 
+                      :src="getProcessedImageUrl(currentMovie)" 
+                      :alt="currentMovie.title"
+                      class="w-full h-full object-cover"
+                      @error="handleImageError">
+                    
+                    <!-- 动态角标展示 (SDK Badge 特性) -->
+                    <span v-if="imageLab.badge" class="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-black tracking-wider uppercase rounded bg-rose-600 text-white shadow-lg">
+                      {{ imageLab.badge }}
+                    </span>
+                  </div>
+
+                  <!-- SDK 图像裁剪与处理工坊控制台 -->
+                  <div class="p-2.5 rounded-lg bg-surface-900/80 border border-slate-800 space-y-2 text-xs">
+                    <div class="flex items-center justify-between text-slate-300 font-semibold">
+                      <span>🎨 SDK 图像处理工坊</span>
+                      <span class="text-[10px] text-violet-400 font-mono">/v1/images/*</span>
+                    </div>
+
+                    <!-- 裁切比例 -->
+                    <div>
+                      <div class="flex justify-between text-slate-400 text-[11px] mb-1">
+                        <span>裁切比例 (Ratio)</span>
+                        <span class="font-mono text-violet-300">{{ imageLab.ratio }}</span>
+                      </div>
+                      <select v-model="imageLab.ratio" class="w-full bg-surface-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+                        <option value="0.667">标准海报 2:3 (0.667) [Primary]</option>
+                        <option value="1.777">横版缩略 16:9 (1.777) [Thumb]</option>
+                        <option value="1.0">正方形 1:1 (1.000)</option>
+                        <option value="-1">原图原始比例 (-1)</option>
+                      </select>
+                    </div>
+
+                    <!-- 人脸自动居中 / Pos 调节 -->
+                    <div class="flex items-center justify-between text-slate-400 text-[11px]">
+                      <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" v-model="imageLab.autoFace" class="rounded bg-surface-800 text-violet-600">
+                        <span>AI 人脸自动定位</span>
+                      </label>
+                      <label class="flex items-center gap-1">
+                        <span>角标:</span>
+                        <select v-model="imageLab.badge" class="bg-surface-800 border border-slate-700 rounded px-1.5 py-0.5 text-[10px]">
+                          <option value="">无</option>
+                          <option value="SUB">SUB (字幕)</option>
+                          <option value="4K">4K 超清</option>
+                          <option value="HD">HD</option>
+                          <option value="LEAK">流出</option>
+                          <option value="无码">无码</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 快速操作卡片 -->
+                <div class="p-3 rounded-xl bg-surface-850 border border-slate-800 space-y-2 text-xs">
+                  <div class="text-slate-400 font-semibold mb-2">快捷链接与资产</div>
+                  <a :href="currentMovie.homepage" target="_blank" class="w-full py-1.5 px-3 rounded bg-surface-800 hover:bg-surface-700 text-slate-300 flex items-center justify-between transition">
+                    <span>原厂官方主页</span>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                  <a v-if="currentMovie.preview_video_url || currentMovie.preview_video_hls_url" :href="currentMovie.preview_video_url || currentMovie.preview_video_hls_url" target="_blank" class="w-full py-1.5 px-3 rounded bg-violet-900/30 hover:bg-violet-900/50 text-violet-300 border border-violet-800/50 flex items-center justify-between transition">
+                    <span>🎬 试看预告片 (Trailer)</span>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
+                  </a>
+                </div>
+              </div>
+
+              <!-- 右侧：元数据字段矩阵与详情内容 -->
+              <div class="md:col-span-8 space-y-5">
+                
+                <!-- 详情选项卡 (Tab) -->
+                <div class="flex items-center gap-4 border-b border-slate-800 pb-2 text-sm font-medium">
+                  <button @click="detailTab = 'info'" :class="detailTab === 'info' ? 'text-violet-400 border-b-2 border-violet-500 pb-2 -mb-2.5 font-bold' : 'text-slate-400 hover:text-slate-200'">
+                    元数据详情 (Metadata)
+                  </button>
+                  <button @click="detailTab = 'gallery'" :class="detailTab === 'gallery' ? 'text-violet-400 border-b-2 border-violet-500 pb-2 -mb-2.5 font-bold' : 'text-slate-400 hover:text-slate-200'">
+                    剧照画廊 ({{ (currentMovie.preview_images || []).length }})
+                  </button>
+                  <button @click="detailTab = 'reviews'; fetchReviews(currentMovie.provider, currentMovie.id)" :class="detailTab === 'reviews' ? 'text-violet-400 border-b-2 border-violet-500 pb-2 -mb-2.5 font-bold' : 'text-slate-400 hover:text-slate-200'">
+                    用户短评 (Reviews)
+                  </button>
+                  <button @click="detailTab = 'raw'" :class="detailTab === 'raw' ? 'text-violet-400 border-b-2 border-violet-500 pb-2 -mb-2.5 font-bold' : 'text-slate-400 hover:text-slate-200'">
+                    JSON 原始数据
+                  </button>
+                </div>
+
+                <!-- Tab 1: 核心元数据列表 -->
+                <div v-if="detailTab === 'info'" class="space-y-4">
+                  <!-- 标题与自动翻译操作 -->
+                  <div class="bg-surface-850 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between text-xs text-slate-400">
+                      <span>完整片名 (Title)</span>
+                      <button 
+                        @click="translateTitleAndSummary" 
+                        :disabled="isTranslating"
+                        class="text-violet-400 hover:text-violet-300 flex items-center gap-1 font-medium transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/></svg>
+                        <span>{{ isTranslating ? '正在翻译...' : '一键调用 SDK 翻译 (/v1/translate)' }}</span>
+                      </button>
+                    </div>
+                    <p class="text-sm font-semibold text-slate-100 leading-relaxed">{{ currentMovie.title }}</p>
+                    <p v-if="translatedTitle" class="text-xs text-violet-300 font-normal bg-violet-950/40 p-2 rounded border border-violet-800/40">
+                      <strong>中译：</strong>{{ translatedTitle }}
+                    </p>
+                  </div>
+
+                  <!-- 核心属性网格 -->
+                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                    <div class="bg-surface-850 p-3 rounded-lg border border-slate-800">
+                      <span class="text-slate-400 block text-[11px] mb-1">片商 (Maker)</span>
+                      <span class="font-medium text-slate-200">{{ currentMovie.maker || '-' }}</span>
+                    </div>
+                    <div class="bg-surface-850 p-3 rounded-lg border border-slate-800">
+                      <span class="text-slate-400 block text-[11px] mb-1">厂牌 (Label)</span>
+                      <span class="font-medium text-slate-200">{{ currentMovie.label || '-' }}</span>
+                    </div>
+                    <div class="bg-surface-850 p-3 rounded-lg border border-slate-800">
+                      <span class="text-slate-400 block text-[11px] mb-1">系列 (Series)</span>
+                      <span class="font-medium text-slate-200">{{ currentMovie.series || '-' }}</span>
+                    </div>
+                    <div class="bg-surface-850 p-3 rounded-lg border border-slate-800">
+                      <span class="text-slate-400 block text-[11px] mb-1">导演 (Director)</span>
+                      <span class="font-medium text-slate-200">{{ currentMovie.director || '-' }}</span>
+                    </div>
+                    <div class="bg-surface-850 p-3 rounded-lg border border-slate-800">
+                      <span class="text-slate-400 block text-[11px] mb-1">片长 (Runtime)</span>
+                      <span class="font-medium text-slate-200">{{ currentMovie.runtime ? currentMovie.runtime + ' 分钟' : '-' }}</span>
+                    </div>
+                    <div class="bg-surface-850 p-3 rounded-lg border border-slate-800">
+                      <span class="text-slate-400 block text-[11px] mb-1">发行日期 (Release)</span>
+                      <span class="font-medium text-slate-200">{{ currentMovie.release_date || '-' }}</span>
+                    </div>
+                  </div>
+
+                  <!-- 主演演员列表 (联动 Actor Info) -->
+                  <div class="bg-surface-850 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <span class="text-xs text-slate-400 block font-semibold">主演名单 (Actors)</span>
+                    <div class="flex flex-wrap gap-2">
+                      <div 
+                        v-for="actor in (currentMovie.actors || [])" 
+                        :key="actor"
+                        @click="searchActorDetail(actor)"
+                        class="px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-violet-900/40 hover:border-violet-600 border border-slate-700 text-xs text-slate-200 flex items-center gap-1.5 cursor-pointer transition">
+                        <svg class="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                        <span>{{ actor }}</span>
+                        <span class="text-[10px] text-slate-500">查看</span>
+                      </div>
+                      <span v-if="!currentMovie.actors || currentMovie.actors.length === 0" class="text-xs text-slate-500">暂无演员信息</span>
+                    </div>
+                  </div>
+
+                  <!-- 标签分类 (Genres) -->
+                  <div class="bg-surface-850 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <span class="text-xs text-slate-400 block font-semibold">标签类别 (Genres)</span>
+                    <div class="flex flex-wrap gap-1.5">
+                      <span 
+                        v-for="genre in (currentMovie.genres || [])" 
+                        :key="genre" 
+                        class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[11px] border border-slate-700/60">
+                        # {{ genre }}
+                      </span>
+                      <span v-if="!currentMovie.genres || currentMovie.genres.length === 0" class="text-xs text-slate-500">暂无分类标签</span>
+                    </div>
+                  </div>
+
+                  <!-- 剧情简介 (Summary) -->
+                  <div class="bg-surface-850 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <span class="text-xs text-slate-400 block font-semibold">剧情介绍 (Summary)</span>
+                    <p class="text-xs text-slate-300 leading-relaxed whitespace-pre-line">{{ currentMovie.summary || '暂无剧情简介。' }}</p>
+                    <div v-if="translatedSummary" class="mt-3 p-3 rounded-lg bg-violet-950/30 border border-violet-800/40 text-xs text-violet-200 leading-relaxed">
+                      <strong class="block text-violet-400 mb-1">中文翻译：</strong>
+                      <p class="whitespace-pre-line">{{ translatedSummary }}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Tab 2: 剧照画廊 (Preview Images) -->
+                <div v-if="detailTab === 'gallery'" class="space-y-4">
+                  <div v-if="currentMovie.preview_images && currentMovie.preview_images.length > 0" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div 
+                      v-for="(img, idx) in currentMovie.preview_images" 
+                      :key="idx" 
+                      @click="lightboxImage = img"
+                      class="aspect-video bg-surface-800 rounded-lg overflow-hidden border border-slate-700/60 cursor-pointer group relative">
+                      <img :src="img" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" loading="lazy" @error="handleImageError">
+                      <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="p-8 text-center text-xs text-slate-500">
+                    该影片源未提供高清预览剧照。
+                  </div>
+                </div>
+
+                <!-- Tab 3: 用户短评 (Reviews) -->
+                <div v-if="detailTab === 'reviews'" class="space-y-3">
+                  <div v-if="loadingReviews" class="p-6 text-center text-xs text-slate-400">正在拉取源站用户短评 (/v1/reviews/...)</div>
+                  <div v-else-if="reviewsList.length > 0" class="space-y-3">
+                    <div v-for="(rev, idx) in reviewsList" :key="idx" class="p-3 rounded-xl bg-surface-850 border border-slate-800 space-y-1.5 text-xs">
+                      <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-200">{{ rev.title || '用户评论' }}</span>
+                        <span class="text-amber-400 font-semibold">★ {{ rev.score }}</span>
+                      </div>
+                      <p class="text-slate-300 leading-relaxed">{{ rev.comment }}</p>
+                      <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                        <span>作者: {{ rev.author || '匿名' }}</span>
+                        <span>日期: {{ rev.date || '-' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="p-8 text-center text-xs text-slate-500">
+                    当前影片暂未收录影评。
+                  </div>
+                </div>
+
+                <!-- Tab 4: 原始 JSON 数据 -->
+                <div v-if="detailTab === 'raw'" class="space-y-2">
+                  <div class="flex justify-end">
+                    <button @click="copyJson" class="text-xs text-violet-400 hover:text-violet-300">复制 JSON</button>
+                  </div>
+                  <pre class="bg-surface-950 p-4 rounded-xl text-[11px] font-mono text-emerald-400 overflow-x-auto border border-slate-800 max-h-96">{{ JSON.stringify(currentMovie, null, 2) }}</pre>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- 底部工具条 -->
+          <div class="p-4 bg-surface-850 border-t border-slate-800 flex items-center justify-between text-xs">
+            <span class="text-slate-500">ID: {{ currentMovie.id }} | Provider: {{ currentMovie.provider }}</span>
+            <div class="flex items-center gap-2">
+              <button 
+                @click="downloadNFOFile" 
+                class="px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-200 border border-slate-700 transition">
+                导出 movie.nfo
+              </button>
+              <button 
+                @click="activeDetailModal = false" 
+                class="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium shadow-md shadow-violet-600/30 transition">
+                完成查看
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 演员详情抽屉 (Actor Info Modal) -->
+      <div v-if="activeActorModal" class="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="relative w-full max-w-lg bg-surface-900 border border-slate-700 rounded-2xl p-6 space-y-4 shadow-2xl">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 class="font-bold text-base text-white flex items-center gap-2">
+              <span>女优 / 演员档案</span>
+              <span class="text-xs text-violet-400 font-mono">/v1/actors/:provider/:id</span>
+            </h3>
+            <button @click="activeActorModal = false" class="text-slate-400 hover:text-white">✕</button>
+          </div>
+
+          <div class="flex gap-4 items-start">
+            <img :src="currentActor.images && currentActor.images[0] ? currentActor.images[0] : 'https://placehold.co/150x200/1e293b/ffffff?text=Avatar'" class="w-28 h-36 object-cover rounded-xl border border-slate-700 shrink-0 bg-surface-800">
+            <div class="space-y-1.5 text-xs flex-1">
+              <h4 class="text-lg font-bold text-white">{{ currentActor.name }}</h4>
+              <p class="text-slate-400">别名: {{ (currentActor.aliases || []).join(' / ') || '-' }}</p>
+              <p class="text-slate-400">生日: {{ currentActor.birthday || '-' }}</p>
+              <p class="text-slate-400">身高: {{ currentActor.height ? currentActor.height + ' cm' : '-' }}</p>
+              <p class="text-slate-400">罩杯: {{ currentActor.cup_size || '-' }}</p>
+              <p class="text-slate-400">三围: {{ currentActor.measurements || '-' }}</p>
+              <p class="text-slate-400">国籍: {{ currentActor.nationality || '-' }}</p>
+            </div>
+          </div>
+
+          <div class="p-3 bg-surface-850 rounded-xl border border-slate-800 text-xs text-slate-300">
+            <span class="block text-slate-400 mb-1 font-semibold">个人简介:</span>
+            <p>{{ currentActor.summary || '暂无更多资料。' }}</p>
+          </div>
+
+          <div class="flex justify-end pt-2">
+            <button @click="quickSearch(currentActor.name); activeActorModal = false" class="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-semibold">
+              搜索该女优的所有影片 &rarr;
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 图片全屏灯箱 -->
+      <div v-if="lightboxImage" @click="lightboxImage = null" class="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 cursor-zoom-out">
+        <img :src="lightboxImage" class="max-w-full max-h-full rounded-lg object-contain shadow-2xl">
+      </div>
+
+      <!-- 设置配置弹窗 (连接地址与 Token) -->
+      <div v-if="showConfigModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-surface-900 border border-slate-700 rounded-2xl p-6 space-y-4 shadow-2xl">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 class="font-bold text-base text-white">SDK 连接配置</h3>
+            <button @click="showConfigModal = false" class="text-slate-400 hover:text-white">✕</button>
+          </div>
+
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">Server API 基础地址</label>
+              <input type="text" v-model="serverUrl" placeholder="http://127.0.0.1:8080" class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono">
+              <span class="text-[11px] text-slate-500 mt-1 block">默认端口为 8080（Gin HTTP 服务）</span>
+            </div>
+
+            <div>
+              <label class="block text-slate-400 font-semibold mb-1">API Token (可选)</label>
+              <input type="password" v-model="apiToken" placeholder="若服务端启用 -token 参数请输入" class="w-full bg-surface-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono">
+              <span class="text-[11px] text-slate-500 mt-1 block">对应 Header Authorization: Bearer &lt;Token&gt;</span>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center pt-2">
+            <button @click="testConnection" class="text-xs text-violet-400 hover:text-violet-300">测试连通性</button>
+            <div class="space-x-2">
+              <button @click="showConfigModal = false" class="px-3 py-1.5 rounded-lg bg-surface-800 text-slate-300 text-xs">取消</button>
+              <button @click="saveConfig" class="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold">保存设置</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- 底部状态与版权 -->
+    <footer class="border-t border-slate-800/80 bg-surface-900 py-4 text-xs text-slate-500">
+      <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span>MetaTube SDK Go Web UI 原型</span>
+          <span>&bull;</span>
+          <span>支持多源并发刮削、AI 裁剪、角标、翻译与 NFO 生成</span>
+        </div>
+        <div>
+          <span>API 映射: <code>/v1/movies/search</code>, <code>/v1/movies/:p/:id</code>, <code>/v1/images/*</code>, <code>/v1/translate</code></span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const { createApp, ref, reactive, onMounted } = Vue;
+
+    // 内置的高保真 Mock 演示数据（当未启动本地 SDK server 时提供完整交互）
+    const MOCK_PROVIDERS = [
+      { name: 'fanza', label: 'FANZA / DMM 官方' },
+      { name: 'javbus', label: 'JavBus 综合' },
+      { name: 'mgstage', label: 'MGStage (MGS)' },
+      { name: 'fc2', label: 'FC2 个人创作者' },
+      { name: 'fc2hub', label: 'FC2 Hub 数据库' },
+      { name: 'dahlia', label: 'Dahlia 达利亚' },
+      { name: 'sod', label: 'SOD Create' },
+      { name: 'caribbeancom', label: '加勒比 Caribbean' },
+      { name: '1pondo', label: '一本道 1Pondo' },
+      { name: 'tokyo-hot', label: '东京热 Tokyo-Hot' },
+      { name: 'heyzo', label: 'HEYZO' }
+    ];
+
+    const MOCK_MOVIES = [
+      {
+        id: 'ssis00001',
+        number: 'SSIS-001',
+        title: '新人NO.1スタイル 専属決定！ 大型新人デビュー 河北彩花',
+        summary: '透明感あふれる美貌と極上のスタイルを兼ね备えた奇跡の大型新人・河北彩花が待望の専属デビュー！誰もが息を呑む圧倒的な美しさと、初めて見せる初々しい表情。まさに時代を代表するトップアイドルの誕生の瞬間をその目に焼き付けてください。',
+        provider: 'fanza',
+        homepage: 'https://www.dmm.co.jp/digital/videoa/-/detail/=/cid=ssis00001/',
+        director: 'TAKAHASHI',
+        actors: ['河北彩花', '河北彩伽'],
+        thumb_url: 'https://picsum.photos/id/1062/400/600',
+        cover_url: 'https://picsum.photos/id/1062/800/1200',
+        big_cover_url: 'https://picsum.photos/id/1062/1200/800',
+        preview_video_url: 'https://www.w3schools.com/html/mov_bbb.mp4',
+        preview_images: [
+          'https://picsum.photos/id/1062/800/450',
+          'https://picsum.photos/id/1025/800/450',
+          'https://picsum.photos/id/1035/800/450',
+          'https://picsum.photos/id/1040/800/450',
+        ],
+        maker: 'S1 NO.1 STYLE',
+        label: 'S1 NO.1 STYLE',
+        series: '新人NO.1スタイル',
+        genres: ['高清', '单体作品', '美少女', '美乳', '新出道'],
+        score: 4.8,
+        runtime: 140,
+        release_date: '2021-06-19'
+      },
+      {
+        id: 'fc2-1234567',
+        number: 'FC2-PPV-1234567',
+        title: '【完全素人】現役女子大生が初めての個人撮影に挑戦！透明感あふれる笑顔',
+        summary: 'ネットで知り合った現役女子大生とのプライベートハメ撮り映像。緊張した初々しい表情から徐々に開放的になっていく自然体の姿を完全ノーカット収録。',
+        provider: 'fc2',
+        homepage: 'https://adult.contents.fc2.com/article/1234567/',
+        director: '',
+        actors: ['素人'],
+        thumb_url: 'https://picsum.photos/id/1074/400/600',
+        cover_url: 'https://picsum.photos/id/1074/800/1200',
+        big_cover_url: 'https://picsum.photos/id/1074/1200/800',
+        preview_video_url: '',
+        preview_images: [
+          'https://picsum.photos/id/1074/800/450',
+          'https://picsum.photos/id/1080/800/450',
+        ],
+        maker: '個人撮影FC2',
+        label: 'FC2-PPV',
+        series: '',
+        genres: ['素人', '個人撮影', '女子大生', '高画質'],
+        score: 4.5,
+        runtime: 95,
+        release_date: '2023-04-12'
+      },
+      {
+        id: 'abp00123',
+        number: 'ABP-123',
+        title: '極上泡姫の極限奉仕！ 究极の癒やしと快感テクニック',
+        summary: '最高峰のメンズエステで噂の看板泡姫が特別なおもてなし。全身を使った濃密マッサージと艶やかなサービスで身も心もとろける極上の120分。',
+        provider: 'javbus',
+        homepage: 'https://www.javbus.com/ABP-123',
+        director: 'K.O',
+        actors: ['三上悠亜'],
+        thumb_url: 'https://picsum.photos/id/1027/400/600',
+        cover_url: 'https://picsum.photos/id/1027/800/1200',
+        big_cover_url: 'https://picsum.photos/id/1027/1200/800',
+        preview_images: [
+          'https://picsum.photos/id/1027/800/450',
+          'https://picsum.photos/id/1011/800/450',
+        ],
+        maker: 'PRESTIGE',
+        label: 'ABSOLUTELY PERFECT',
+        series: '極上泡姫',
+        genres: ['泡姬', '巨乳', '单体作品', '美肌'],
+        score: 4.6,
+        runtime: 120,
+        release_date: '2022-09-01'
+      }
+    ];
+
+    const MOCK_REVIEWS = [
+      { title: '大満足の1本でした！', author: '映画ファンA', comment: 'パッケージの期待を全く裏切らない完成度。映像美も素晴らしい。', score: 5.0, date: '2023-08-10' },
+      { title: '演技と表情がとても自然', author: '匿名レビュアー', comment: 'カメラワークが良くて見応えがありました。後半の展開も熱い。', score: 4.5, date: '2023-08-12' }
+    ];
+
+    createApp({
+      setup() {
+        // 配置状态
+        const serverUrl = ref(localStorage.getItem('metatube_url') || 'http://127.0.0.1:8080');
+        const apiToken = ref(localStorage.getItem('metatube_token') || '');
+        const mockMode = ref(true); // 默认优先进入 Mock 体验，保证无需后端也能完整测试
+        const connected = ref(false);
+        const showConfigModal = ref(false);
+
+        // 数据源与检索状态
+        const movieProviders = ref(MOCK_PROVIDERS);
+        const selectedProvider = ref('');
+        const searchQuery = ref('SSIS-001');
+        const searchResults = ref([]);
+        const loadingSearch = ref(false);
+        const viewMode = ref('grid'); // 'grid' | 'table'
+
+        // 刮削高级选项
+        const searchOptions = reactive({
+          fallback: true,
+          lazy: true,
+          autoTranslate: true,
+        });
+
+        // 快捷搜索标签推荐
+        const sampleQueries = ['SSIS-001', 'FC2-PPV-1234567', 'ABP-123', '河北彩花'];
+
+        // 详情模态框
+        const activeDetailModal = ref(false);
+        const currentMovie = ref({});
+        const detailTab = ref('info'); // 'info' | 'gallery' | 'reviews' | 'raw'
+        const translatedTitle = ref('');
+        const translatedSummary = ref('');
+        const isTranslating = ref(false);
+
+        // 影评与演员
+        const reviewsList = ref([]);
+        const loadingReviews = ref(false);
+        const activeActorModal = ref(false);
+        const currentActor = ref({});
+        const lightboxImage = ref(null);
+
+        // 图片工坊参数 (实时演示 SDK /v1/images)
+        const imageLab = reactive({
+          ratio: '0.667',
+          autoFace: true,
+          badge: '4K',
+        });
+
+        // 获取请求 Headers
+        const getHeaders = () => {
+          const headers = { 'Accept': 'application/json' };
+          if (apiToken.value) {
+            headers['Authorization'] = `Bearer ${apiToken.value}`;
+          }
+          return headers;
+        };
+
+        // 测试与服务端连接
+        const testConnection = async () => {
+          if (mockMode.value) return;
+          try {
+            const res = await fetch(`${serverUrl.value}/v1/providers`, {
+              headers: getHeaders()
+            });
+            if (res.ok) {
+              const data = await res.json();
+              connected.value = true;
+              if (data.data && data.data.movie_providers) {
+                movieProviders.value = Object.keys(data.data.movie_providers).map(name => ({
+                  name,
+                  label: name
+                }));
+              }
+            } else {
+              connected.value = false;
+            }
+          } catch (e) {
+            connected.value = false;
+            console.warn('MetaTube SDK 连接失败:', e);
+          }
+        };
+
+        // 执行搜索与刮削
+        const handleSearch = async () => {
+          if (!searchQuery.value.trim()) return;
+          loadingSearch.value = true;
+          searchResults.value = [];
+
+          if (mockMode.value) {
+            // Mock 模拟搜索
+            setTimeout(() => {
+              const q = searchQuery.value.trim().toLowerCase();
+              const filtered = MOCK_MOVIES.filter(m => 
+                m.number.toLowerCase().includes(q) || 
+                m.title.toLowerCase().includes(q) ||
+                m.actors.some(a => a.toLowerCase().includes(q))
+              );
+              searchResults.value = filtered.length > 0 ? filtered : MOCK_MOVIES;
+              loadingSearch.value = false;
+            }, 400);
+            return;
+          }
+
+          // 真实直连 SDK API
+          try {
+            const params = new URLSearchParams({
+              q: searchQuery.value.trim(),
+              fallback: searchOptions.fallback ? 'true' : 'false'
+            });
+            if (selectedProvider.value) {
+              params.append('provider', selectedProvider.value);
+            }
+
+            const res = await fetch(`${serverUrl.value}/v1/movies/search?${params.toString()}`, {
+              headers: getHeaders()
+            });
+            const json = await res.json();
+
+            if (res.ok && json.data) {
+              searchResults.value = Array.isArray(json.data) ? json.data : [json.data];
+            } else {
+              alert(json.error ? `刮削错误: ${json.error.message}` : '未找到匹配影片');
+            }
+          } catch (err) {
+            alert('网络请求失败，请检查 SDK 是否启动或查看跨域设置: ' + err.message);
+          } finally {
+            loadingSearch.value = false;
+          }
+        };
+
+        // 快速搜索样例
+        const quickSearch = (q) => {
+          searchQuery.value = q;
+          handleSearch();
+        };
+
+        // 获取影片完整刮削详情
+        const fetchMovieDetail = async (provider, id) => {
+          translatedTitle.value = '';
+          translatedSummary.value = '';
+
+          if (mockMode.value) {
+            const found = MOCK_MOVIES.find(m => m.provider === provider && m.id === id) || MOCK_MOVIES[0];
+            currentMovie.value = JSON.parse(JSON.stringify(found));
+            activeDetailModal.value = true;
+            detailTab.value = 'info';
+            if (searchOptions.autoTranslate) {
+              translateTitleAndSummary();
+            }
+            return;
+          }
+
+          // 直连 SDK GET /v1/movies/:provider/:id
+          try {
+            const url = `${serverUrl.value}/v1/movies/${encodeURIComponent(provider)}/${encodeURIComponent(id)}?lazy=${searchOptions.lazy}`;
+            const res = await fetch(url, { headers: getHeaders() });
+            const json = await res.json();
+            if (res.ok && json.data) {
+              currentMovie.value = json.data;
+              activeDetailModal.value = true;
+              detailTab.value = 'info';
+              if (searchOptions.autoTranslate) {
+                translateTitleAndSummary();
+              }
+            } else {
+              alert('获取影片详情失败: ' + (json.error ? json.error.message : '未知错误'));
+            }
+          } catch (e) {
+            alert('获取详情失败: ' + e.message);
+          }
+        };
+
+        // 获取影评 (GET /v1/reviews/:provider/:id)
+        const fetchReviews = async (provider, id) => {
+          reviewsList.value = [];
+          loadingReviews.value = true;
+          if (mockMode.value) {
+            setTimeout(() => {
+              reviewsList.value = MOCK_REVIEWS;
+              loadingReviews.value = false;
+            }, 300);
+            return;
+          }
+
+          try {
+            const url = `${serverUrl.value}/v1/reviews/${encodeURIComponent(provider)}/${encodeURIComponent(id)}`;
+            const res = await fetch(url, { headers: getHeaders() });
+            const json = await res.json();
+            if (res.ok && json.data) {
+              reviewsList.value = json.data || [];
+            }
+          } catch (e) {
+            console.warn(e);
+          } finally {
+            loadingReviews.value = false;
+          }
+        };
+
+        // 联动查询女优/演员详情 (GET /v1/actors/search & GET /v1/actors/:provider/:id)
+        const searchActorDetail = async (name) => {
+          if (mockMode.value) {
+            currentActor.value = {
+              id: 'actor-001',
+              name: name,
+              provider: 'fanza',
+              aliases: ['河北彩花', 'Saika Kawakita'],
+              birthday: '1999-04-24',
+              height: 169,
+              cup_size: 'E',
+              measurements: 'B88 / W59 / H89',
+              nationality: '日本',
+              summary: '日本东京都出身的著名专属女优，以纯净清爽的气质与高挑身段风靡亚洲。',
+              images: ['https://picsum.photos/id/1062/400/500']
+            };
+            activeActorModal.value = true;
+            return;
+          }
+
+          try {
+            const searchUrl = `${serverUrl.value}/v1/actors/search?q=${encodeURIComponent(name)}`;
+            const res = await fetch(searchUrl, { headers: getHeaders() });
+            const json = await res.json();
+            if (res.ok && json.data && json.data.length > 0) {
+              const first = json.data[0];
+              // 取详情
+              const detailUrl = `${serverUrl.value}/v1/actors/${encodeURIComponent(first.provider)}/${encodeURIComponent(first.id)}`;
+              const dRes = await fetch(detailUrl, { headers: getHeaders() });
+              const dJson = await dRes.json();
+              currentActor.value = dJson.data || first;
+              activeActorModal.value = true;
+            } else {
+              alert(`未在演员数据库中检索到 "${name}" 的独立档案`);
+            }
+          } catch (e) {
+            alert('查询演员信息出错: ' + e.message);
+          }
+        };
+
+        // 翻译片名与简介 (GET /v1/translate)
+        const translateTitleAndSummary = async () => {
+          if (!currentMovie.value.title) return;
+          isTranslating.value = true;
+
+          if (mockMode.value) {
+            setTimeout(() => {
+              translatedTitle.value = '【新人No.1 Style专属决定】超大型新人出道 河北彩花';
+              translatedSummary.value = '兼具透明感的美貌与顶级身材的奇迹超大型新人·河北彩花备受瞩目的专属出道作！任谁都会屏息的绝美与初次展现的稚嫩神情，请亲眼见证这时代的巅峰瞬间。';
+              isTranslating.value = false;
+            }, 500);
+            return;
+          }
+
+          try {
+            // 翻译标题
+            const tUrl = `${serverUrl.value}/v1/translate?q=${encodeURIComponent(currentMovie.value.title)}&from=auto&to=zh-CN&engine=googlefree`;
+            const res = await fetch(tUrl);
+            const data = await res.json();
+            if (data.data) {
+              translatedTitle.value = data.data.translated_text;
+            }
+
+            // 翻译简介
+            if (currentMovie.value.summary) {
+              const sUrl = `${serverUrl.value}/v1/translate?q=${encodeURIComponent(currentMovie.value.summary)}&from=auto&to=zh-CN&engine=googlefree`;
+              const sRes = await fetch(sUrl);
+              const sData = await sRes.json();
+              if (sData.data) {
+                translatedSummary.value = sData.data.translated_text;
+              }
+            }
+          } catch (e) {
+            console.error('翻译出错:', e);
+          } finally {
+            isTranslating.value = false;
+          }
+        };
+
+        // 图片代理路径生成 (利用 SDK 的 /v1/images/primary/:provider/:id)
+        const getImageProxy = (provider, id, fallbackUrl) => {
+          if (mockMode.value) return fallbackUrl;
+          return `${serverUrl.value}/v1/images/primary/${encodeURIComponent(provider)}/${encodeURIComponent(id)}`;
+        };
+
+        // 图像处理工坊图片 URL (带上 ratio, auto, badge 参数)
+        const getProcessedImageUrl = (movie) => {
+          if (!movie.cover_url && !movie.thumb_url) return '';
+          if (mockMode.value) return movie.cover_url || movie.thumb_url;
+
+          const params = new URLSearchParams({
+            ratio: imageLab.ratio,
+            auto: imageLab.autoFace ? 'true' : 'false',
+          });
+          if (imageLab.badge) {
+            params.append('badge', imageLab.badge);
+          }
+          return `${serverUrl.value}/v1/images/primary/${encodeURIComponent(movie.provider)}/${encodeURIComponent(movie.id)}?${params.toString()}`;
+        };
+
+        // 优雅处理图片加载失败
+        const handleImageError = (e) => {
+          e.target.src = 'https://placehold.co/400x600/1e293b/94a3b8?text=Image+Unavailable';
+        };
+
+        // 生成 Kodi / Jellyfin / Emby 标准 NFO XML 格式
+        const generateNFOXml = () => {
+          const m = currentMovie.value;
+          const actorsXml = (m.actors || []).map(a => `    <actor>\n        <name>${a}</name>\n        <type>Actor</type>\n    </actor>`).join('\n');
+          const genresXml = (m.genres || []).map(g => `    <genre>${g}</genre>`).join('\n');
+
+          return `<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<movie>
+    <title>${translatedTitle.value || m.title || ''}</title>
+    <originaltitle>${m.title || ''}</originaltitle>
+    <num>${m.number || ''}</num>
+    <premiered>${m.release_date || ''}</premiered>
+    <releasedate>${m.release_date || ''}</releasedate>
+    <runtime>${m.runtime || 0}</runtime>
+    <plot>${translatedSummary.value || m.summary || ''}</plot>
+    <studio>${m.maker || ''}</studio>
+    <label>${m.label || ''}</label>
+    <series>${m.series || ''}</series>
+    <director>${m.director || ''}</director>
+    <rating>${m.score || 0}</rating>
+${genresXml}
+${actorsXml}
+    <uniqueid type="${m.provider || 'metatube'}" default="true">${m.id || ''}</uniqueid>
+    <source>${m.provider || ''}</source>
+    <website>${m.homepage || ''}</website>
+</movie>`;
+        };
+
+        // 复制 NFO
+        const copyNFO = () => {
+          const xml = generateNFOXml();
+          navigator.clipboard.writeText(xml).then(() => {
+            alert('已成功复制 Emby / Jellyfin 兼容的 NFO 内容到剪贴板！');
+          });
+        };
+
+        // 下载 NFO 文件
+        const downloadNFOFile = () => {
+          const xml = generateNFOXml();
+          const blob = new Blob([xml], { type: 'text/xml' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${currentMovie.value.number || 'movie'}.nfo`;
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+
+        // 复制 JSON
+        const copyJson = () => {
+          navigator.clipboard.writeText(JSON.stringify(currentMovie.value, null, 2)).then(() => {
+            alert('已复制 JSON 原始数据到剪贴板！');
+          });
+        };
+
+        // 保存连接配置
+        const saveConfig = () => {
+          localStorage.setItem('metatube_url', serverUrl.value);
+          localStorage.setItem('metatube_token', apiToken.value);
+          showConfigModal.value = false;
+          testConnection();
+        };
+
+        onMounted(() => {
+          testConnection();
+          // 初始自动填入展示数据
+          searchResults.value = MOCK_MOVIES;
+        });
+
+        return {
+          serverUrl,
+          apiToken,
+          mockMode,
+          connected,
+          showConfigModal,
+          movieProviders,
+          selectedProvider,
+          searchQuery,
+          searchResults,
+          loadingSearch,
+          viewMode,
+          searchOptions,
+          sampleQueries,
+          activeDetailModal,
+          currentMovie,
+          detailTab,
+          translatedTitle,
+          translatedSummary,
+          isTranslating,
+          reviewsList,
+          loadingReviews,
+          activeActorModal,
+          currentActor,
+          lightboxImage,
+          imageLab,
+          testConnection,
+          handleSearch,
+          quickSearch,
+          fetchMovieDetail,
+          fetchReviews,
+          searchActorDetail,
+          translateTitleAndSummary,
+          getImageProxy,
+          getProcessedImageUrl,
+          handleImageError,
+          copyNFO,
+          downloadNFOFile,
+          copyJson,
+          saveConfig
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

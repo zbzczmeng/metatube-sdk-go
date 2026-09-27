@@ -1,0 +1,18 @@
+{
+  "name": "metatube-desktop-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build:css": "node node_modules/.pnpm/tailwindcss@3.4.19/node_modules/tailwindcss/lib/cli.js -i src/style.css -o dist/style.css --minify --config tailwind.config.js --content dist/index.html",
+    "build": "pnpm run build:css"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17"
+  }
+}

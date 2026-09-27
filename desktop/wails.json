@@ -1,0 +1,18 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "metatube-desktop",
+  "outputfilename": "metatube-desktop",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm build",
+  "author": {
+    "name": "MetaTube Community",
+    "email": "dev@metatube.community"
+  },
+  "info": {
+    "companyName": "MetaTube Community",
+    "productName": "MetaTube Scraper Desktop",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright 2024 MetaTube Community",
+    "comments": "基于 MetaTube Go SDK 构建的桌面元数据刮削与检视工作台"
+  }
+}
