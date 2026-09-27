@@ -26,3 +26,7 @@ go.work.sum
 
 # Build files
 build/
+
+# Go cache & module dirs
+.gocache/
+.gopath/
